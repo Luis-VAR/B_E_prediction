@@ -63,14 +63,6 @@ incompleteResponses[cols_factor] <- lapply(incompleteResponses[cols_factor], as.
 sapply(completeResponses, class)
 sapply(incompleteResponses, class)
 
-#shuffling the data to ensure randomization
-
-completeResponsesshuffle <- sample(nrows(completeResponses))
-completeResponses <- completeResponses[completeResponsesshuffle, ]
-
-incompleteResponsesshuffle <- sample(nrows(incompleteResponses))
-incompleteResponses <- incompleteResponses[incompleteResponsesshuffle, ]
-
 #quick exploration
 
 kable(summary(completeResponses))
@@ -213,6 +205,39 @@ GBMmodel <- train(brand ~ .,
                   preProc = c("center", "scale"),
                   tuneGrid = myGrid)
 
+#checking the model resuls
 
+head(GBMmodel)
+GBMmodel$bestTune
+summary(GBMmodel)
+plot(GBMmodel)
+
+#saving
+
+saveRDS(GBMmodel, "GBMmodel.rds")
 ```
+
+
+<div style="margin-bottom:100px;">
+</div>
+
+<h2 style="text-align: center;">KNN</h2>
+
+
+```{r}
+#trxing with one last model, KNN
+
+KNNmodel <- train(brand ~ .,
+                  data = training,
+                  method = "knn",
+                  trControl = Tcontrol,
+                  preProcess = c("center", "scale"),
+                  tuneLength = 10)
+
+#saving
+
+KNNmodel
+saveRDS(KNNmodel, "KNNmodel.rds")
+```
+
 
