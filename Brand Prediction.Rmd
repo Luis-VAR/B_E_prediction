@@ -10,14 +10,15 @@ output:   html_document
 
 <h2 style="text-align: center;">Introduction</h2>
 
-<p style="text-align: justify;">On this report, a data set of 2 dataframes will be used, one of 10000 observations which will be used to train the models, and another of 5000 observations, which it will be used to predict, in this case, a possible brand preference.</p>
+<p style="text-align: justify;">This is a follow-up report, where the brand (Belkin | Elago) will be predicted using the information acquired in the previous report.</p>
 
 <div style="margin-bottom:100px;">
 </div>
 
 <h2 style="text-align: center;">Used Libraries</h2>
 
-```{r results='asis'}
+
+```{r results='asis', warning=FALSE, message=FALSE}
 
 library(ggplot2)
 library(ggthemes)
@@ -29,309 +30,189 @@ library(e1071)
 library(doParallel)
 library(C50)
 library(NCmisc)
- list.functions.in.file("Markdown-Belkin-Elago-Customer-Predictions.Rmd", alphabetic = TRUE)
+library(knitr)
 
 ```
+
 
 <div style="margin-bottom:100px;">
 </div>
 
-<h2 style="text-align: center;">Data Set</h2>
+<h2 style="text-align: center;">Data</h2>
 
-```{r results='asis'}
-#Loading the Data Frame:
 
-completeResponses <- read.csv("C:/Users/Lenovo/Documents/Bootcamp - Data Science/Module 2/Belkin-ElagoPrediction/Data/BelkinComplete.csv")
+```{r results='asis', fig.align='center', out.extra='angle=90'}
 
-completeResponsesFullAge <- read.csv("C:/Users/Lenovo/Documents/Bootcamp - Data Science/Module 2/Belkin-ElagoPrediction/Data/BelkinComplete.csv")
+#reading prediction and training df
 
-incompleteResponses <- read.csv("C:/Users/Lenovo/Documents/Bootcamp - Data Science/Module 2/Belkin-ElagoPrediction/Data/SurveyIncomplete.csv")
+completeResponses <- read.csv(file = "Data/BelkinComplete.csv", header = TRUE)
+incompleteResponses <- read.csv("Data/BelkinIncomplete.csv", header = TRUE)
 
-#Changing Variables
 
-completeResponses$zipcode <- as.factor(completeResponses$zipcode)
-completeResponses$elevel <- as.factor(completeResponses$elevel)
-completeResponses$age<- cut(completeResponses$age, c(19,37,51,81), right = FALSE)
+#creating vector to change variables to factor
 
-completeResponsesFullAge$zipcode <- as.factor(completeResponsesFullAge$zipcode)
-completeResponsesFullAge$elevel <- as.factor(completeResponsesFullAge$elevel)
+cols_factor <- c("zipcode", "elevel", "car", "brand")
 
-incompleteResponses$elevel <- replace(incompleteResponses$elevel, incompleteResponses$elevel == 0, NA)
-incompleteResponses$zipcode <- as.factor(incompleteResponses$zipcode) 
-incompleteResponses %>% filter(!is.na(elevel))
-incompleteResponses$elevel <- as.factor(incompleteResponses$elevel)
-incompleteResponses$age<- cut(incompleteResponses$age, c(19,37,51,81), right = FALSE)
+#applying the factorization to the vectors in both df
 
+completeResponses[cols_factor] <- lapply(completeResponses[cols_factor], as.factor)
+incompleteResponses[cols_factor] <- lapply(incompleteResponses[cols_factor], as.factor)
+
+#checking that the vectors have been corretly modified
+
+sapply(completeResponses, class)
+sapply(incompleteResponses, class)
+
+#shuffling the data to ensure randomization
+
+completeResponsesshuffle <- sample(nrows(completeResponses))
+completeResponses <- completeResponses[completeResponsesshuffle, ]
+
+incompleteResponsesshuffle <- sample(nrows(incompleteResponses))
+incompleteResponses <- incompleteResponses[incompleteResponsesshuffle, ]
+
+#quick exploration
+
+kable(summary(completeResponses))
+kable(summary(incompleteResponses))
 
 ```
+
 
 <div style="margin-bottom:100px;">
 </div>
 
-<h2 style="text-align: center;">Ranking Features by Importance</h2>
+<h2 style="text-align: center;">Setting Partitions and Training Sets</h2>
 
-```{r}
 
-#For Data Frame completeResponses
-
-set.seed(107)
-
-control <- trainControl(method="repeatedcv", 
-                        number=10, 
-                        repeats=3)
-
-model <- train(brand~., 
-               data=completeResponses, 
-               method="lvq", 
-               preProcess="scale", 
-               trControl=control)
-
-importance <- varImp(model, scale=FALSE)
-
-print(importance)
-plot(importance)
-
-#For Data Frame completeResponsesFullAge
+```{r results='asis', fig.align='center', out.extra='angle=90'}
+#create partition 
 
 set.seed(107)
 
-control <- trainControl(method="repeatedcv", 
+partition <- createDataPartition(y = completeResponses$brand, p = .75, list = FALSE)
+str(partition)
+training <- completeResponses[ partition,]
+testing  <- completeResponses[-partition,]
+
+#cross validation 10 folds repeat 3 times
+
+Tcontrol <- trainControl(method='repeatedcv', 
                         number=10, 
-                        repeats=3)
-
-model <- train(brand~., 
-               data=completeResponsesFullAge, 
-               method="lvq", 
-               preProcess="scale", 
-               trControl=control)
-
-importance <- varImp(model, scale=FALSE)
-
-print(importance)
-plot(importance)
+                        repeats=10,
+                        classProbs = TRUE)
 ```
+
 
 <div style="margin-bottom:100px;">
 </div>
 
-<h2 style="text-align: center;">Removing Redundant Features</h2>
+<h2 style="text-align: center;">Random Forest</h2>
+
 
 ```{r}
+Tgrid <- expand.grid(.mtry = c(2, 3, 4))
 
-set.seed(107)
+RFmodel <- train(brand~., 
+                 data = training, 
+                 method = 'rf', 
+                 metric = 'Accuracy', 
+                 preProcess = c("scale","center"),
+                 tuneGrid = Tgrid, 
+                 trControl = Tcontrol)
 
-correlationMatrix <- cor(completeResponses[sapply(completeResponses, function(x) !is.factor(x))])
+saveRDS(RFmodel, "RF_Be_El.rds")
 
-highlyCorrelated <- findCorrelation(correlationMatrix, cutoff = 0.5)
-
-completeResponses[,-highlyCorrelated]
-
-print(highlyCorrelated)
-
+print(RFmodel)
 ```
+
+
+```{r}
+set.seed(107)
+bestMtry <- tuneRF(x, y, stepFactor = 1.5, improve = 1e-5, ntree = 500)
+```
+
+
+```{r}
+#random forest predictions
+
+RFpredictions <- predict(RFmodel, testing)
+postResample(RFpredictions, testing$brand)
+head(RFpredictions)
+
+RFpredictionsFinal <-predict(RFmodel, incompleteResponses)
+postResample(RFpredictionsFinal, incompleteResponses$brand)
+head(RFpredictionsFinal)
+
+#variable importance
+
+varImp(RFmodel)
+```
+
 
 <div style="margin-bottom:100px;">
 </div>
 
-<h2 style="text-align: center;">Prediction Models</h2>
+<h2 style="text-align: center;">Decision Tree</h2>
+
 
 ```{r}
+DTreeModel <- train(brand ~ ., data = training, 
+                      method = "C5.0",
+                      preProcess = c("scale","center"),
+                      trControl = Tcontrol,
+                      tuneLenght = 4)
 
-#Partial Least Square Model
-
-ctrl <- trainControl(method = "repeatedcv", 
-                     repeats = 3, 
-                     classProbs = TRUE, 
-                     summaryFunction = twoClassSummary)
-
-set.seed(107)
-
-inTraining <- createDataPartition(y = completeResponses$brand, 
-                                  p = .75, 
-                                  list = FALSE)
-
-training <- completeResponses[inTraining,]
-
-testing <- completeResponses[-inTraining,]
-
-plsFit <- train(brand ~ ., 
-                data = training, 
-                method = "pls", 
-                preProc = c("center", "scale"), 
-                tuneLength = 15, 
-                trControl = ctrl, 
-                metric = "ROC")
-
-plsFit
-ggplot(plsFit)
-
-plsClases <- predict(plsFit, newdata = testing)
-
-str(plsClases)
-
-plsProbs <- predict(plsFit, newdata = testing, type = "prob")
-
-head(plsProbs)
-
-confusionMatrix(data = plsClases, testing$brand)
-
-
-#Prediction PLS
-
-
-rfPred <- predict(plsFit, newdata=testing, type="raw")  
-
-table(predict(plsFit))
-
+saveRDS(DTreeModel, "DTreeModel.rds")
 ```
 
 
-#C5.0 Model
 
 ```{r}
+#predictions using splitted data
 
-fitControl <- trainControl(method = "repeatedcv",
-                           number = 10,
-                           repeats = 10, 
-                           returnResamp="all")
+DTPredictions <-predict(DTreeModel, testing)
+postResample(DTPredictions, testing$brand)
 
-# Choose the Features and Classes
+#predictions using the new df
 
-x <- completeResponsesFullAge[c("age","salary","car","credit")]
-y <- completeResponsesFullAge$brand
+DTPredictionsFinal = predict(DTreeModel, newdata = incompleteResponses[-7], type ='raw')
+postResample(DTPredictionsFinal, incompleteResponses$brand)
 
-grid <- expand.grid( .winnow = c(TRUE,FALSE),
-                     .trials=c(1,5,10,15,20),
-                     .model="tree" )
+#creating file from predicted brands
 
-mdl <- train(x = x,
-            y = y,
-            tuneGrid = grid,
-            trControl = fitControl,
-            method="C5.0",
-            verbose=FALSE)
-
-mdl
-
-#Visualize the Resample Distributions
-
-xyplot(mdl, type = c("g", "p", "smooth"))
-
-#Prediction C5.0
-
-dtPredictions <-predict(mdl, testing)
-
-postResample(dtPredictions, testing$brand)
-
-dtPredictionsFinal = predict(mdl, newdata = incompleteResponses[-7], type ='raw')
-
-postResample(dtPredictionsFinal, incompleteResponses$brand)
-
-head(dtPredictionsFinal)
-
-incompleteResponses$brand <- dtPredictionsFinal
-
-head(brands_incomplete)
-
-write.csv(brands_incomplete, file = "BrandsPredicted.csv")
-
+head(DTPredictionsFinal)
+incompleteResponses$brand <- DTPredictionsFinal
+head(incompleteResponses)
+write.csv(incompleteResponses, file = "PredictionBrands.csv")
 ```
 
 
-#Random Forest
+<div style="margin-bottom:100px;">
+</div>
+
+<h2 style="text-align: center;">GBM</h2>
+
 
 ```{r}
+#on my first try i got an error stating that at least one of the class variables is not a valid variable name. Therefore I am changing the variable names from brands form 0/1 to "usable names" (This is more of a note for future me)
 
-control <- trainControl(method='oob', 
-                        number=10) 
-                        #repeats=1)
+levels(training$brand) <- c("zero", "one")
 
-metric <- "Accuracy"
+#defining tune grid
+myGrid <-  expand.grid(n.trees = c(150, 175, 200, 225),
+                      interaction.depth = c(5, 6, 7, 8, 9),
+                      shrinkage = c(0.075, 0.1, 0.125, 0.15, 0.2),
+                      n.minobsinnode = c(7, 10, 12, 15))
 
-set.seed(107)
+GBMmodel <- train(brand ~ .,
+                  data = training,
+                  method = 'gbm',
+                  trControl = Tcontrol,
+                  metric = "ROC",
+                  preProc = c("center", "scale"),
+                  tuneGrid = myGrid)
 
-#Number randomely variable selected is mtry
-
-mtry <- sqrt(ncol(completeResponses))
-
-tunegrid <- expand.grid(.mtry=mtry)
-
-rf_Model <- train(brand ~., 
-                      data=completeResponses, 
-                      method='rf', 
-                      metric='Accuracy', 
-                      tuneGrid=tunegrid, 
-                      trControl=control)
-print(rf_Model)
-
-mtry <- sqrt
-
-#Number of Trees to Grow
-
-ntree <- 3
-
-control <- trainControl(method='oob', 
-                        number=10, 
-                        #repeats=1,
-                        search = 'random')
-
-#Random generate 15 mtry values with tuneLength = 15
-
-set.seed(107)
-rf_random <- train(brand ~ .,
-                   data = completeResponses,
-                   method = 'rf',
-                   metric = 'Accuracy',
-                   tuneLength  = 10, 
-                   trControl = control)
-
-print(rf_random)
-
-#Create control function for training with 10 folds and keep 3 folds for training. search method is grid.
-
-control <- trainControl(method='oob', 
-                        number=10, 
-                        #repeats=1, 
-                        search='grid')
-
-#create tunegrid with 15 values from 1:15 for mtry to tunning model. Our train function will change number of entry variable at each split according to tunegrid. 
-
-tunegrid <- expand.grid(.mtry = (1:3)) 
-
-rf_gridsearch <- train(brand ~ ., 
-                       data = completeResponses,
-                       method = 'rf',
-                       metric = 'Accuracy',
-                       tuneGrid = tunegrid)
-
-print(rf_gridsearch)
-
-plot(rf_gridsearch)
-
-#Manually Tunning
-
-control <- trainControl(method = 'oob',
-                        number = 10,
-                        #repeats = 1,
-                        search = 'grid')
-
-tunegrid <- expand.grid(.mtry = c(sqrt(ncol(completeResponses))))
-modellist <- list()
-
-#Prediction Random Forest
-
-rfPredictions <-predict(rf_Model, testing)
-
-postResample(rfPredictions, testing$brand)
-
-head(rfPredictions)
-
-table(rfPredictionsFinal)
-
-rfPredictionsFinal <-predict(rf_Model, incompleteResponses)
-
-table(rfPredictionsFinal)
-
-varImp(rf_Model)
 
 ```
+
