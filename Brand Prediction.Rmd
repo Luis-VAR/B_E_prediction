@@ -31,6 +31,7 @@ library(doParallel)
 library(C50)
 library(NCmisc)
 library(knitr)
+library(mgsub)
 
 ```
 
@@ -58,6 +59,24 @@ cols_factor <- c("zipcode", "elevel", "car", "brand")
 completeResponses[cols_factor] <- lapply(completeResponses[cols_factor], as.factor)
 incompleteResponses[cols_factor] <- lapply(incompleteResponses[cols_factor], as.factor)
 
+#changing variable names. which can be done in this case to increase readability, since the df is small
+
+completeResponses$elevel <- mgsub(string = completeResponses$elevel,
+                                  pattern = c(0, 1, 2, 3, 4),
+                                  replacement = c("Less than HS", "HS", "College", "Degree", "Master's, Doc, others"))
+
+completeResponses$car <- mgsub(string = completeResponses$car,
+                               pattern = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20),
+                               replacement = c("BMW", "Buick", "Cadillac", "Chevrolet", "Chrysler", "Dodge", "Ford", "Honda", "Hyundai", "Jeep", "Kia", "Lincoln", "Mazda", "Mercedes Benz", "Mitsubishi", "Nissan", "Ram", "Subaru", "Toyota", "None of the above"))
+
+completeResponses$zipcode <- mgsub(string = completeResponses$zipcode,
+                                   pattern = c(0, 1, 2, 3, 4, 5, 6, 7, 8),
+                                   replacement = c("New England", "Mid-Atlantic", "East North Central", "West North Central", "South Atlantic", "East South Central", "West South Central", "Mountain", "Pacific"))
+
+completeResponses$brand <- mgsub(string = completeResponses$brand,
+                                 pattern = c(0,1), 
+                                 replacement = c("Acer","Sony"))
+
 #checking that the vectors have been corretly modified
 
 sapply(completeResponses, class)
@@ -67,7 +86,6 @@ sapply(incompleteResponses, class)
 
 kable(summary(completeResponses))
 kable(summary(incompleteResponses))
-
 ```
 
 
@@ -189,7 +207,7 @@ write.csv(incompleteResponses, file = "PredictionBrands.csv")
 ```{r}
 #on my first try i got an error stating that at least one of the class variables is not a valid variable name. Therefore I am changing the variable names from brands form 0/1 to "usable names" (This is more of a note for future me)
 
-levels(training$brand) <- c("zero", "one")
+#levels(training$brand) <- c("zero", "one")
 
 #defining tune grid
 myGrid <-  expand.grid(n.trees = c(150, 175, 200, 225),
